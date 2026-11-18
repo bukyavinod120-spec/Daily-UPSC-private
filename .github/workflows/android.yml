@@ -9,13 +9,16 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: 8.5
-      - name: Create Full Project
+      - name: Clear Cache and Create Project
         run: |
+          rm -rf ~/.gradle .gradle app/build
           mkdir -p app/src/main/java/com/dailyupsc/private
+          cat > gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx2048m
+          android.useAndroidX=true
+          android.enableJetifier=true
+          kotlin.code.style=official
+          EOF
           cat > settings.gradle << 'EOF'
           pluginManagement {
               repositories {
@@ -143,9 +146,11 @@ jobs:
           EOF
       - name: Build APK
         run: |
-          gradle wrapper --gradle-version 8.5 || true
+          wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
+          unzip -q gradle-8.5-bin.zip
+          ./gradle-8.5/bin/gradle wrapper --gradle-version 8.5
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --no-build-cache --rerun-tasks
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
