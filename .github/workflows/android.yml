@@ -151,8 +151,3 @@ jobs:
         with:
           name: DailyUPSC-APK
           path: app/build/outputs/apk/debug/*.apk
-3. `Commit changes` → Go to `Actions` → Wait 4-5 min
-
-This version has *ZERO Firebase, ZERO json needed* - it will build for sure.
-
-Tell me when you see green tick ✅
