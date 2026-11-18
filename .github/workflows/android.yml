@@ -1,0 +1,156 @@
+name: Build Daily UPSC APK
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.5
+      - name: Create Full Project
+        run: |
+          mkdir -p app/src/main/java/com/dailyupsc/private
+          mkdir -p app/src/main/res/layout
+          echo "include ':app'" > settings.gradle
+          cat > build.gradle << 'EOF'
+          buildscript {
+              dependencies { classpath 'com.google.gms:google-services:4.4.0' }
+          }
+          plugins {
+              id 'com.android.application' version '8.2.0' apply false
+              id 'org.jetbrains.kotlin.android' version '1.9.10' apply false
+          }
+          EOF
+          cat > app/build.gradle << 'EOF'
+          plugins {
+              id 'com.android.application'
+              id 'org.jetbrains.kotlin.android'
+              id 'com.google.gms.google-services'
+              id 'kotlin-kapt'
+          }
+          android {
+              namespace 'com.dailyupsc.private'
+              compileSdk 34
+              defaultConfig {
+                  applicationId "com.dailyupsc.private"
+                  minSdk 24
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0"
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+              kotlinOptions { jvmTarget = '17' }
+          }
+          dependencies {
+              implementation platform('com.google.firebase:firebase-bom:32.7.0')
+              implementation 'com.google.firebase:firebase-auth'
+              implementation 'com.google.firebase:firebase-firestore'
+              implementation 'androidx.core:core-ktx:1.12.0'
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'com.google.android.material:material:1.11.0'
+          }
+          EOF
+          if [ ! -f app/google-services.json ]; then
+          cat > app/google-services.json << 'EOF'
+          {"project_info":{"project_number":"123456","project_id":"daily-upsc-demo","storage_bucket":"daily-upsc-demo.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:123456:android:abc","android_client_info":{"package_name":"com.dailyupsc.private"}},"oauth_client":[],"api_key":[{"current_key":"AIzaSyDummyKey1234567890"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1"}
+          EOF
+          fi
+          cat > app/src/main/AndroidManifest.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+            <uses-permission android:name="android.permission.INTERNET"/>
+            <application android:allowBackup="true" android:label="Daily UPSC" android:theme="@android:style/Theme.Light">
+              <activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
+              <activity android:name=".PrivateChatActivity" android:exported="false"/>
+            </application>
+          </manifest>
+          EOF
+          cat > app/src/main/java/com/dailyupsc/private/MainActivity.kt << 'EOF'
+          package com.dailyupsc.private
+          import android.content.Intent
+          import android.os.Bundle
+          import android.os.Handler
+          import android.view.MotionEvent
+          import android.widget.EditText
+          import android.widget.TextView
+          import androidx.appcompat.app.AlertDialog
+          import androidx.appcompat.app.AppCompatActivity
+          class MainActivity : AppCompatActivity() {
+              var tap=0; var last=0L
+              override fun onCreate(s: Bundle?) {
+                  super.onCreate(s)
+                  val tv=TextView(this)
+                  tv.text="Daily UPSC\n\nCurrent Affairs Today:\n- NEP 2020 Update\n- Supreme Court Judgement\n- ISRO Aditya L1\n\nDaily Quiz: Article 32 is?\n\n(Long press here for secret chat)"
+                  tv.textSize=18f; tv.setPadding(50,150,50,50)
+                  setContentView(tv)
+                  tv.setOnClickListener{
+                      val n=System.currentTimeMillis()
+                      if(n-last>3000) tap=0
+                      tap++; last=n
+                      if(tap>=5){tap=0; showPin()}
+                  }
+                  tv.setOnTouchListener(object: android.view.View.OnTouchListener{
+                      val h=Handler(); var long=false
+                      val r=Runnable{ long=true; showPin() }
+                      override fun onTouch(v:android.view.View?, e:MotionEvent):Boolean{
+                          when(e.action){
+                              MotionEvent.ACTION_DOWN->{h.postDelayed(r,750)}
+                              MotionEvent.ACTION_UP->{h.removeCallbacks(r); if(long){long=false; return true}}
+                          }
+                          return false
+                      }
+                  })
+              }
+              fun showPin(){
+                  val i=EditText(this); AlertDialog.Builder(this).setTitle("Enter PIN").setView(i)
+                  .setPositiveButton("OK"){_,_-> if(i.text.toString()=="1234") startActivity(Intent(this,PrivateChatActivity::class.java))}.setNegativeButton("Cancel",null).show()
+              }
+          }
+          EOF
+          cat > app/src/main/java/com/dailyupsc/private/PrivateChatActivity.kt << 'EOF'
+          package com.dailyupsc.private
+          import android.os.Bundle
+          import android.widget.*
+          import androidx.appcompat.app.AppCompatActivity
+          import com.google.firebase.firestore.FirebaseFirestore
+          class PrivateChatActivity : AppCompatActivity() {
+              val db=FirebaseFirestore.getInstance()
+              override fun onCreate(b:Bundle?){
+                  super.onCreate(b)
+                  val scroll=ScrollView(this); val lay=LinearLayout(this); lay.orientation=LinearLayout.VERTICAL
+                  val box=LinearLayout(this); box.orientation=LinearLayout.VERTICAL
+                  val inp=EditText(this); inp.hint="Message..."
+                  val btn=Button(this); btn.text="Send"
+                  lay.addView(TextView(this).apply{text="Private Secure Chat - PIN 1234"}); lay.addView(box); lay.addView(inp); lay.addView(btn)
+                  scroll.addView(lay); setContentView(scroll)
+                  val chatId="daily_upsc_private_1"
+                  btn.setOnClickListener{
+                      val t=inp.text.toString(); if(t.isEmpty()) return@setOnClickListener
+                      db.collection("chats").document(chatId).collection("msgs").add(mapOf("text" to t,"time" to System.currentTimeMillis()))
+                      inp.setText("")
+                  }
+                  db.collection("chats").document(chatId).collection("msgs").orderBy("time").addSnapshotListener{v,_->
+                      box.removeAllViews(); v?.forEach{ d-> val tv=TextView(this); tv.text=d.getString("text"); tv.setPadding(20,10,20,10); box.addView(tv) }
+                  }
+              }
+          }
+          EOF
+      - name: Build APK
+        run: |
+          gradle wrapper --gradle-version 8.5
+          chmod +x gradlew
+          ./gradlew assembleDebug
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: DailyUPSC-APK
+          path: app/build/outputs/apk/debug/*.apk
