@@ -1,11 +1,3 @@
-Perfect! Then it's even easier. *No Firebase = No json, No Google plugin, Build will be 100% success.*
-
-I removed Firebase completely. Chat will now work offline on same phone.
-
-*Replace full code again with this NO-FIREBASE version:*
-
-1. `Code` → `.github/workflows/android.yml` → Pencil ✏️ → `Ctrl + A` → Delete
-2. Paste this:
 name: Build Daily UPSC APK
 on: [push]
 jobs:
