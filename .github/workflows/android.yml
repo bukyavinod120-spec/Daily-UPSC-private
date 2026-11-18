@@ -19,12 +19,10 @@ jobs:
           mkdir -p app/src/main/res/layout
           echo "include ':app'" > settings.gradle
           cat > build.gradle << 'EOF'
-          buildscript {
-              dependencies { classpath 'com.google.gms:google-services:4.4.0' }
-          }
           plugins {
               id 'com.android.application' version '8.2.0' apply false
               id 'org.jetbrains.kotlin.android' version '1.9.10' apply false
+              id 'com.google.gms.google-services' version '4.4.0' apply false
           }
           EOF
           cat > app/build.gradle << 'EOF'
@@ -59,11 +57,9 @@ jobs:
               implementation 'com.google.android.material:material:1.11.0'
           }
           EOF
-          if [ ! -f app/google-services.json ]; then
           cat > app/google-services.json << 'EOF'
           {"project_info":{"project_number":"123456","project_id":"daily-upsc-demo","storage_bucket":"daily-upsc-demo.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:123456:android:abc","android_client_info":{"package_name":"com.dailyupsc.private"}},"oauth_client":[],"api_key":[{"current_key":"AIzaSyDummyKey1234567890"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1"}
           EOF
-          fi
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -146,7 +142,7 @@ jobs:
           EOF
       - name: Build APK
         run: |
-          gradle wrapper --gradle-version 8.5
+          gradle wrapper --gradle-version 8.5 || true
           chmod +x gradlew
           ./gradlew assembleDebug
       - name: Upload APK
