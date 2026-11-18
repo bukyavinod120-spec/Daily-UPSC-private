@@ -1,24 +1,33 @@
 name: Build Daily UPSC APK
-on: [push]
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-      - name: Clear Cache and Create Project
+
+      - name: Create project files
         run: |
-          rm -rf ~/.gradle .gradle app/build
-          mkdir -p app/src/main/java/com/dailyupsc/private
+          mkdir -p app/src/main/java/com/dailyupsc/app
+
           cat > gradle.properties << 'EOF'
           org.gradle.jvmargs=-Xmx2048m
           android.useAndroidX=true
-          android.enableJetifier=true
           kotlin.code.style=official
           EOF
+
           cat > settings.gradle << 'EOF'
           pluginManagement {
               repositories {
@@ -34,25 +43,27 @@ jobs:
                   mavenCentral()
               }
           }
-          rootProject.name = "Daily-UPSC-private"
+          rootProject.name = "DailyUPSC"
           include ':app'
           EOF
+
           cat > build.gradle << 'EOF'
           plugins {
               id 'com.android.application' version '8.2.0' apply false
               id 'org.jetbrains.kotlin.android' version '1.9.10' apply false
           }
           EOF
+
           cat > app/build.gradle << 'EOF'
           plugins {
               id 'com.android.application'
               id 'org.jetbrains.kotlin.android'
           }
           android {
-              namespace 'com.dailyupsc.private'
+              namespace 'com.dailyupsc.app'
               compileSdk 34
               defaultConfig {
-                  applicationId "com.dailyupsc.private"
+                  applicationId "com.dailyupsc.app"
                   minSdk 24
                   targetSdk 34
                   versionCode 1
@@ -70,89 +81,171 @@ jobs:
               implementation 'com.google.android.material:material:1.11.0'
           }
           EOF
+
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-            <uses-permission android:name="android.permission.INTERNET"/>
-            <application android:allowBackup="true" android:label="Daily UPSC" android:theme="@android:style/Theme.Light">
-              <activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
-              <activity android:name=".PrivateChatActivity" android:exported="false"/>
-            </application>
+              <uses-permission android:name="android.permission.INTERNET"/>
+              <application
+                  android:allowBackup="true"
+                  android:label="Daily UPSC"
+                  android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
+                  <activity android:name=".MainActivity" android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+                  <activity android:name=".PrivateChatActivity" android:exported="false"/>
+              </application>
           </manifest>
           EOF
-          cat > app/src/main/java/com/dailyupsc/private/MainActivity.kt << 'EOF'
-          package com.dailyupsc.private
+
+          cat > app/src/main/java/com/dailyupsc/app/MainActivity.kt << 'EOF'
+          package com.dailyupsc.app
+
           import android.content.Intent
           import android.os.Bundle
           import android.os.Handler
+          import android.os.Looper
           import android.view.MotionEvent
+          import android.view.View
           import android.widget.EditText
           import android.widget.TextView
           import androidx.appcompat.app.AlertDialog
           import androidx.appcompat.app.AppCompatActivity
+
           class MainActivity : AppCompatActivity() {
-              var tap=0; var last=0L
-              override fun onCreate(s: Bundle?) {
-                  super.onCreate(s)
-                  val tv=TextView(this)
-                  tv.text="Daily UPSC\n\nCurrent Affairs Today:\n- NEP 2020 Update\n- Supreme Court Judgement\n- ISRO Aditya L1\n\nDaily Quiz: Article 32 is?\n\n(Long press here for secret chat)"
-                  tv.textSize=18f; tv.setPadding(50,150,50,50)
+              private var tapCount = 0
+              private var lastTap = 0L
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  val tv = TextView(this)
+                  tv.text = "Daily UPSC\n\nCurrent Affairs Today:\n- NEP 2020 Update\n- Supreme Court Judgement\n- ISRO Aditya L1\n\nDaily Quiz: Article 32 is?"
+                  tv.textSize = 18f
+                  tv.setPadding(50, 150, 50, 50)
                   setContentView(tv)
-                  tv.setOnClickListener{
-                      val n=System.currentTimeMillis()
-                      if(n-last>3000) tap=0
-                      tap++; last=n
-                      if(tap>=5){tap=0; showPin()}
+
+                  // Tap 5 times within 3 seconds each -> PIN dialog
+                  tv.setOnClickListener {
+                      val now = System.currentTimeMillis()
+                      if (now - lastTap > 3000) tapCount = 0
+                      tapCount++
+                      lastTap = now
+                      if (tapCount >= 5) {
+                          tapCount = 0
+                          showPin()
+                      }
                   }
-                  tv.setOnTouchListener(object: android.view.View.OnTouchListener{
-                      val h=Handler(); var long=false
-                      val r=Runnable{ long=true; showPin() }
-                      override fun onTouch(v:android.view.View?, e:MotionEvent):Boolean{
-                          when(e.action){
-                              MotionEvent.ACTION_DOWN->{h.postDelayed(r,750)}
-                              MotionEvent.ACTION_UP->{h.removeCallbacks(r); if(long){long=false; return true}}
+
+                  // Long press (0.75 sec) -> PIN dialog
+                  tv.setOnTouchListener(object : View.OnTouchListener {
+                      private val handler = Handler(Looper.getMainLooper())
+                      private var fired = false
+                      private val runner = Runnable {
+                          fired = true
+                          showPin()
+                      }
+
+                      override fun onTouch(v: View?, e: MotionEvent): Boolean {
+                          when (e.action) {
+                              MotionEvent.ACTION_DOWN -> handler.postDelayed(runner, 750)
+                              MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                  handler.removeCallbacks(runner)
+                                  if (fired) {
+                                      fired = false
+                                      return true
+                                  }
+                              }
                           }
                           return false
                       }
                   })
               }
-              fun showPin(){
-                  val i=EditText(this); AlertDialog.Builder(this).setTitle("Enter PIN").setView(i)
-                  .setPositiveButton("OK"){_,_-> if(i.text.toString()=="1234") startActivity(Intent(this,PrivateChatActivity::class.java))}.setNegativeButton("Cancel",null).show()
+
+              private fun showPin() {
+                  val input = EditText(this)
+                  AlertDialog.Builder(this)
+                      .setTitle("Enter PIN")
+                      .setView(input)
+                      .setPositiveButton("OK") { _, _ ->
+                          if (input.text.toString() == "1234") {
+                              startActivity(Intent(this, PrivateChatActivity::class.java))
+                          }
+                      }
+                      .setNegativeButton("Cancel", null)
+                      .show()
               }
           }
           EOF
-          cat > app/src/main/java/com/dailyupsc/private/PrivateChatActivity.kt << 'EOF'
-          package com.dailyupsc.private
+
+          cat > app/src/main/java/com/dailyupsc/app/PrivateChatActivity.kt << 'EOF'
+          package com.dailyupsc.app
+
           import android.os.Bundle
-          import android.widget.*
+          import android.widget.Button
+          import android.widget.EditText
+          import android.widget.LinearLayout
+          import android.widget.ScrollView
+          import android.widget.TextView
           import androidx.appcompat.app.AppCompatActivity
+
           class PrivateChatActivity : AppCompatActivity() {
-              override fun onCreate(b:Bundle?){
-                  super.onCreate(b)
-                  val scroll=ScrollView(this); val lay=LinearLayout(this); lay.orientation=LinearLayout.VERTICAL
-                  val box=LinearLayout(this); box.orientation=LinearLayout.VERTICAL
-                  val inp=EditText(this); inp.hint="Type message..."
-                  val btn=Button(this); btn.text="Send"
-                  lay.addView(TextView(this).apply{text="Private Chat - PIN 1234\n(Offline Mode)"}); lay.addView(box); lay.addView(inp); lay.addView(btn)
-                  scroll.addView(lay); setContentView(scroll)
-                  btn.setOnClickListener{
-                      val t=inp.text.toString(); if(t.isEmpty()) return@setOnClickListener
-                      val tv=TextView(this); tv.text="You: "+t; tv.setPadding(20,10,20,10); tv.textSize=16f
-                      box.addView(tv); inp.setText("")
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  val scroll = ScrollView(this)
+                  val layout = LinearLayout(this)
+                  layout.orientation = LinearLayout.VERTICAL
+                  layout.setPadding(30, 100, 30, 30)
+
+                  val header = TextView(this)
+                  header.text = "Private Chat (Offline Mode)"
+                  header.textSize = 18f
+
+                  val box = LinearLayout(this)
+                  box.orientation = LinearLayout.VERTICAL
+
+                  val input = EditText(this)
+                  input.hint = "Type message..."
+
+                  val send = Button(this)
+                  send.text = "Send"
+
+                  layout.addView(header)
+                  layout.addView(box)
+                  layout.addView(input)
+                  layout.addView(send)
+                  scroll.addView(layout)
+                  setContentView(scroll)
+
+                  send.setOnClickListener {
+                      val text = input.text.toString()
+                      if (text.isEmpty()) return@setOnClickListener
+                      val msg = TextView(this)
+                      msg.text = "You: $text"
+                      msg.setPadding(20, 10, 20, 10)
+                      msg.textSize = 16f
+                      box.addView(msg)
+                      input.setText("")
                   }
               }
           }
           EOF
-      - name: Build APK
+
+      - name: Generate Gradle wrapper
         run: |
           wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
           unzip -q gradle-8.5-bin.zip
           ./gradle-8.5/bin/gradle wrapper --gradle-version 8.5
           chmod +x gradlew
-          ./gradlew assembleDebug --no-build-cache --rerun-tasks
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: DailyUPSC-APK
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
